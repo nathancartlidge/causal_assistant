@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]  # add build requirements here
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "causal_assistant"
+authors = [
+  { name="Nathan Cartlidge", email="nac120@student.bham.ac.uk" },
+]
+version = "0.0.1"
+dynamic = ["readme"]
+description = "Causal Bootstrapping utility package"
+requires-python = ">=3.12"
+classifiers = [
+  "Programming Language :: Python :: 3 :: 3.12",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  # runtime requirements goes here
+  "causalBootstrapping~=0.1.5",
+  "numpy~=2.2.4",
+  "pandas~=2.2.3"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/nathancartlidge/causal_bootstrapping"
+"Bug Tracker" = "https://github.com/nathancartlidge/causal_bootstrapping/issues"
+
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["causal_bootstrapping*"]
+exclude = ["tests*"]
+
+[tool.setuptools.dynamic]
+readme = {file = "README.md"}
