@@ -18,9 +18,11 @@ classifiers = [
 ]
 dependencies = [
   # runtime requirements goes here
-  "causalBootstrapping~=0.1.5",
-  "numpy~=2.2.4",
-  "pandas~=2.2.3"
+  "causalBootstrapping>=0.1.5",
+  "numpy>=2.2.4",
+  "pandas>=2.2.3",
+  "scikit-learn>=1.6.1",
+  "sympy>=1.13.3",
 ]
 
 [project.urls]
