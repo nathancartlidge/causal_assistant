@@ -9,6 +9,9 @@ import causalBootstrapping as cb
 from causal_assistant.utils import _bootstrap, validate_causal_graph, validate_causal_features
 
 
+# todo: move some more methods into this file; maybe a nice helper to calculate causal weights?
+
+
 def bootstrap(causal_graph: str, cause_var: str, effect_var: str, steps: int = 50,
               **features: Union[np.ndarray, pd.DataFrame, tuple[np.ndarray, int]]):
     """
@@ -17,7 +20,7 @@ def bootstrap(causal_graph: str, cause_var: str, effect_var: str, steps: int = 5
     :return: de-confounded X and y (effect and cause) variables, as re-indexed pandas dataframes
     """
     causal_graph = validate_causal_graph(causal_graph, cause_var=cause_var, effect_var=effect_var)
-    validate_causal_features(cause_var=cause_var, **features)
+    validate_causal_features(effect_var=effect_var, **features)
 
     try:
         weight_func, function_string = cb.general_cb_analysis(

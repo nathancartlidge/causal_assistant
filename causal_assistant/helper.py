@@ -2,6 +2,7 @@ import io
 import contextlib
 
 import causalBootstrapping as cb
+from causal_assistant.utils import validate_causal_graph
 
 
 try:
@@ -13,6 +14,9 @@ except NameError:
 
 
 def analyse_graph(graph: str, cause_var: str = "y", effect_var: str = "X", print_output: bool = False):
+    graph = validate_causal_graph(causal_graph=graph, cause_var=cause_var, effect_var=effect_var)
+
+    # this is a little hacky, but it's the best option we have
     f = io.StringIO()
     with contextlib.redirect_stdout(f):
         cb.general_cb_analysis(causal_graph=graph, cause_var_name=cause_var, effect_var_name=effect_var, info_print=True)
