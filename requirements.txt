@@ -1,0 +1,9 @@
+# development dependencies, minimal requirements specified in pyproject.toml / uv.lock!
+causalBootstrapping~=0.1.5
+matplotlib~=3.10.1
+notebook~=7.4.0
+numpy~=2.2.4
+pandas~=2.2.3
+scikit-learn~=1.6.1
+seaborn~=0.13.2
+sympy~=1.13.3

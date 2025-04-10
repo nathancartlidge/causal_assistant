@@ -1,21 +1,30 @@
 [build-system]
-requires = ["setuptools>=61.0"]  # add build requirements here
-build-backend = "setuptools.build_meta"
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
 
 
 [project]
-name = "causal_assistant"
+name = "causal-assistant"
 authors = [
   { name="Nathan Cartlidge", email="nac120@student.bham.ac.uk" },
+  { name="Jianqiao Mao", email="jxm1417@student.bham.ac.uk" },
 ]
-version = "0.0.1"
-dynamic = ["readme"]
+version = "0.1.0"
+readme = "README.md"
 description = "Causal Bootstrapping utility package"
 requires-python = ">=3.12"
 classifiers = [
-  "Programming Language :: Python :: 3 :: 3.12",
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
   "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research"
 ]
+license = "GPL-3.0"
+license-files = ["LICENSE"]
 dependencies = [
   # runtime requirements goes here
   "causalBootstrapping>=0.1.5",
@@ -26,14 +35,14 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/nathancartlidge/causal_bootstrapping"
-"Bug Tracker" = "https://github.com/nathancartlidge/causal_bootstrapping/issues"
+"Homepage" = "https://github.com/nathancartlidge/causal_assistant"
+"Bug Tracker" = "https://github.com/nathancartlidge/causal_assistant/issues"
 
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["causal_bootstrapping*"]
-exclude = ["tests*"]
+include = ["causal_assistant*"]
+exclude = ["demos*"]
 
 [tool.setuptools.dynamic]
 readme = {file = "README.md"}
