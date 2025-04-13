@@ -252,6 +252,9 @@ def validate_causal_features(effect_var: str, **features: Union[np.ndarray, pd.D
         if isinstance(f, tuple):
             f = f[0]
 
+        assert isinstance(f, (np.ndarray, pd.DataFrame)), f"parameter {var} is of type {type(var)}, not expected " \
+            "(numpy array / pandas dataframe)!"
+
         if len(f.shape) == 1 and f.shape[0] == length:
             # todo: automatically fix features, including auto-factorisation
             #       also we should probably raise some kind of warning when we do this?

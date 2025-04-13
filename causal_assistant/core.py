@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Literal, Union
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,8 @@ from causal_assistant.utils import _bootstrap, validate_causal_graph, validate_c
 # todo: move some more methods into this file; maybe a nice helper to calculate causal weights?
 
 
-def bootstrap(causal_graph: str, cause_var: str, effect_var: str, steps: int = 50,
+def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X", steps: int = 50,
+              fit_method: Literal['hist', 'kde'] = "kde",
               **features: Union[np.ndarray, pd.DataFrame, tuple[np.ndarray, int]]):
     """
     Perform a repeated causal bootstrapping on the provided data.
@@ -33,4 +34,5 @@ def bootstrap(causal_graph: str, cause_var: str, effect_var: str, steps: int = 5
         exc = ValueError("Unable to determine a valid interventional distribution from the provided causal graph")
         raise exc from e
 
-    return _bootstrap(weight_func, function_string, cause_var=cause_var, effect_var=effect_var, steps=steps, **features)
+    return _bootstrap(weight_func, function_string, cause_var=cause_var, effect_var=effect_var, steps=steps,
+                      fit_method=fit_method, **features)
