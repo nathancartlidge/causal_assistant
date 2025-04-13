@@ -9,7 +9,7 @@ authors = [
   { name="Nathan Cartlidge", email="nac120@student.bham.ac.uk" },
   { name="Jianqiao Mao", email="jxm1417@student.bham.ac.uk" },
 ]
-version = "0.1.0"
+version = "0.2.0"
 readme = "README.md"
 description = "Causal Bootstrapping utility package"
 requires-python = ">=3.12"
@@ -28,9 +28,10 @@ license-files = ["LICENSE"]
 dependencies = [
   # runtime requirements goes here
   "causalBootstrapping>=0.1.5",
-  "numpy>=2.2.4",
+  "matplotlib>=3.10.1",
+  "numpy>=1.26.4",
   "pandas>=2.2.3",
-  "scikit-learn>=1.6.1",
+  "scikit-learn>=1.5.2",
   "sympy>=1.13.3",
 ]
 

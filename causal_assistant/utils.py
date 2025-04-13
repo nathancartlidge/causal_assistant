@@ -3,7 +3,7 @@ import re
 import inspect
 import warnings
 
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -23,8 +23,8 @@ def _find_primed_features(function_string):
     return primed_feature_map
 
 
-def make_data_map(function_string, kernel_used: bool,
-                  **features: Union[np.ndarray, pd.DataFrame, tuple[np.ndarray, int]]):
+def make_data_map(function_string, kernel_used: bool, features: dict[str, np.ndarray | pd.DataFrame],
+                  bins: dict[str, list[int]]):
     """
     Creates the 'data' parameter for general causal bootstrapping
     :param function_string: The probability function string derived from causal analysis
@@ -32,9 +32,6 @@ def make_data_map(function_string, kernel_used: bool,
     :return: The 'data' argument, properly formatted
     """
     for feature in features:
-        if isinstance(features[feature], tuple):
-            features[feature] = features[feature][0]
-
         if isinstance(features[feature], pd.DataFrame):
             # insert the index as a value, so it doesn't get lost in the deconfound
             features[feature] = features[feature].reset_index().values
@@ -71,8 +68,8 @@ def _find_required_distributions(function_string) -> tuple[set[str], dict[str, l
     return required_features, required_dists
 
 
-def _make_dist(required_values: list[str], bins: dict[str, int], features: dict[str, Any],
-               fit_method: Literal['kde', 'hist'], estimator_kwargs: Union[dict[str, Any], None] = None):
+def _make_dist(required_values: list[str], bins: dict[str, list[int]], features: dict[str, Any],
+               fit_method: Literal['kde', 'hist'], estimator_kwargs: dict[str, Any] | None = None):
     """
     Make a distribution
     :param required_values: the features to include in the distribution
@@ -82,7 +79,7 @@ def _make_dist(required_values: list[str], bins: dict[str, int], features: dict[
     :param estimator_kwargs: extra kwargs for the estimator
     :return: The distribution method
     """
-    data_bins = [bins[r] for r in required_values]
+    data_bins = [v for r in required_values for v in bins[r]]
     if len(required_values) == 1:
         data_fit = features[required_values[0].replace("_prime", "")]
     else:
@@ -110,8 +107,8 @@ def _make_dist(required_values: list[str], bins: dict[str, int], features: dict[
     return pdf_method
 
 
-def make_dist_map(function_string, fit_method: Literal['kde', 'hist'] = "kde",
-                  estimator_kwargs: Union[dict, None] = None, **features: Union[np.ndarray, tuple[np.ndarray, int]]):
+def make_dist_map(function_string, features: dict[str, np.ndarray | pd.DataFrame], bins: dict[str, list[int]],
+                  fit_method: Literal['kde', 'hist'] = "kde", estimator_kwargs: dict | None = None):
     """
     Creates the 'dist_map' parameter for general causal bootstrapping
     :param function_string: The probability function string derived from causal analysis
@@ -125,14 +122,6 @@ def make_dist_map(function_string, fit_method: Literal['kde', 'hist'] = "kde",
     # validation: ensure that all required values have been provided
     missing_values = [x for x in required_features if x not in features and not x.endswith("_prime")]
     assert len(missing_values) == 0, f"Not all values provided! {missing_values}"
-
-    # split out values and bin counts from arguments
-    bins = {p: 0 for p in required_features}
-    for key in features:
-        if isinstance(features[key.replace("_prime", "")], tuple):
-            # bins included
-            bins[key] = features[key][1]
-            features[key] = features[key][0]
 
     # new type of features, now that we have removed all the tuples
     features: dict[str, np.ndarray]
@@ -179,18 +168,19 @@ def calc_weights(cause_var, data_map, dist_map, features, weight_func, kernel_us
 
 
 def _bootstrap(weight_func: callable, function_string: str, cause_var: str, effect_var: str,
-               fit_method: Literal['kde', 'hist'], steps: int = 50,
-               **features: Union[np.ndarray, pd.DataFrame, tuple[np.ndarray[Any, Any], int]]):
+               fit_method: Literal['kde', 'hist'], steps: int, features: dict[str, np.ndarray | pd.DataFrame],
+               bins: dict[str, list[int]]):
     # assume effect data will be a dataframe, so will have an index?
-    if not isinstance(features[effect_var], pd.DataFrame):
+    original_df = features[effect_var]
+    if not isinstance(original_df, pd.DataFrame):
         # auto-cast
-        features[effect_var] = pd.DataFrame(features[effect_var])
+        original_df = features[effect_var] = pd.DataFrame(features[effect_var])
 
     # not a massive fan of this :(
     kernel_used = re.match(rf".*(K\({cause_var},{cause_var}'+\)).*", function_string) is not None
 
-    data_map = make_data_map(function_string, kernel_used=kernel_used, **features)
-    dist_map = make_dist_map(function_string, fit_method=fit_method, **features)
+    data_map = make_data_map(function_string, kernel_used=kernel_used, features=features, bins=bins)
+    dist_map = make_dist_map(function_string, fit_method=fit_method, features=features, bins=bins)
 
     weights, _ = calc_weights(cause_var, data_map, dist_map, features, weight_func, kernel_used=kernel_used)
 
@@ -213,7 +203,6 @@ def _bootstrap(weight_func: callable, function_string: str, cause_var: str, effe
     for key in bootstraps[0]:
         cb_data[key] = np.vstack([d[key] for d in bootstraps])
 
-    original_df = features[effect_var]
     levels = original_df.index.nlevels
     if levels > 1:
         idx = pd.MultiIndex.from_tuples(cb_data[effect_var][:, 0:levels].tolist(),
@@ -240,17 +229,30 @@ def validate_causal_graph(causal_graph: str | None, cause_var: str = "y", effect
     return causal_graph
 
 
-def validate_causal_features(effect_var: str, **features: Union[np.ndarray, pd.DataFrame, tuple[np.ndarray, int]]):
+def validate_causal_features(effect_var: str, input_features: dict[str, np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]]):
     """Validate that each causal feature is of the correct shape etc"""
-    length = features[effect_var].shape[0]
+    length = input_features[effect_var].shape[0]
 
-    for var in features:
+    features = {}
+    bins = {}
+
+    for var in input_features:
         if var == effect_var:
+            features[var] = input_features[var]
             continue
 
-        f = features[var]
+        f = input_features[var]
+        b = None
         if isinstance(f, tuple):
-            f = f[0]
+            f = input_features[var][0]
+            b = input_features[var][1]
+
+        if f.dtype == bool:
+            if len(f.shape) == 2:
+                assert f.shape[1] == 1, f"parameter {var} is of bool type, but multi-dimensional - unable to factorise!"
+                f = np.reshape(f, -1)
+
+            f = pd.factorize(f)[0]
 
         assert isinstance(f, (np.ndarray, pd.DataFrame)), f"parameter {var} is of type {type(var)}, not expected " \
             "(numpy array / pandas dataframe)!"
@@ -260,14 +262,25 @@ def validate_causal_features(effect_var: str, **features: Union[np.ndarray, pd.D
             #       also we should probably raise some kind of warning when we do this?
             # flat array: reshape it for you
             if isinstance(f, np.ndarray):
-                features[var] = f.reshape(-1, 1)
+                f = f.reshape(-1, 1)
+
+        assert len(f.shape) == 2 and f.shape[0] == length, \
+            f"feature '{var}' is of wrong shape {f.shape} (should be [{length}, X])"
+
+        if b is not None:
+            assert len(b) == f.shape[1], f"bin size ({len(b)}) must match feature size {f.shape[1]} for '{var}'!"
         else:
-            assert len(f.shape) == 2 and f.shape[0] == length and f.shape[1] == 1, \
-                f"feature '{var}' is of wrong shape {f.shape} (should be [{length}, 1])"
+            b = [0 for _ in range(f.shape[1])]
 
         try:
-            assert np.isnan(f).sum() == 0, f"feature '{var}' contains NaN values"
+            if isinstance(f, (pd.DataFrame, pd.Series)):
+                assert np.isnan(f.values).sum() == 0, f"feature '{var}' contains NaN values"
+            else:
+                assert np.isnan(f).sum() == 0, f"feature '{var}' contains NaN values"
         except ValueError:
             raise ValueError(f"feature '{var}' might be of wrong type?")
 
-        assert f.dtype != bool, f"feature '{var}' must not be of type bool"
+        features[var] = f
+        bins[var] = b
+
+    return features, bins

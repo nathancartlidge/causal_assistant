@@ -2,26 +2,26 @@ from typing import Literal, Union
 
 import numpy as np
 import pandas as pd
+import warnings
 
-import causalBootstrapping as cb
-
+# cb appears to raise warnings in some cases
+with warnings.catch_warnings(category=SyntaxWarning):
+    warnings.simplefilter(action="ignore", category=SyntaxWarning)
+    import causalBootstrapping as cb
 
 from causal_assistant.utils import _bootstrap, validate_causal_graph, validate_causal_features
 
 
-# todo: move some more methods into this file; maybe a nice helper to calculate causal weights?
-
-
-def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X", steps: int = 50,
-              fit_method: Literal['hist', 'kde'] = "kde",
-              **features: Union[np.ndarray, pd.DataFrame, tuple[np.ndarray, int]]):
+def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X",
+              steps: int = 50, fit_method: Literal['hist', 'kde'] = "kde",
+              **features: np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]):
     """
     Perform a repeated causal bootstrapping on the provided data.
 
     :return: de-confounded X and y (effect and cause) variables, as re-indexed pandas dataframes
     """
     causal_graph = validate_causal_graph(causal_graph, cause_var=cause_var, effect_var=effect_var)
-    validate_causal_features(effect_var=effect_var, **features)
+    features, bins = validate_causal_features(effect_var=effect_var, input_features=features)
 
     try:
         weight_func, function_string = cb.general_cb_analysis(
@@ -35,4 +35,4 @@ def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X", st
         raise exc from e
 
     return _bootstrap(weight_func, function_string, cause_var=cause_var, effect_var=effect_var, steps=steps,
-                      fit_method=fit_method, **features)
+                      fit_method=fit_method, features=features, bins=bins)
