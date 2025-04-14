@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import warnings
 
-from causal_assistant.utils import _bootstrap
+from causal_assistant.utils import _bootstrap, BinFeatureType
 from causal_assistant.helper import validate_causal_graph, validate_causal_features
 
 # cb appears to raise warnings in some cases
@@ -24,7 +24,7 @@ except NameError:
 
 def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X",
               steps: int = 50, fit_method: Literal['hist', 'kde'] = "kde", warn_on_cast: bool = False,
-              **features: np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]):
+              **features: BinFeatureType):
     """
     Perform end-to-end repeated causal bootstrapping on a dataset
 
@@ -70,7 +70,12 @@ def analyse_graph(graph: str, cause_var: str = "y", effect_var: str = "X", print
     # this is a little hacky, but it's the best option we have
     f = io.StringIO()
     with contextlib.redirect_stdout(f):
-        cb.general_cb_analysis(causal_graph=graph, cause_var_name=cause_var, effect_var_name=effect_var, info_print=True)
+        try:
+            cb.general_cb_analysis(causal_graph=graph, cause_var_name=cause_var, effect_var_name=effect_var, info_print=True)
+        except UnboundLocalError as e:
+            exc = ValueError("Unable to determine a valid interventional distribution from the provided causal graph")
+            raise exc from e
+
     output = f.getvalue()
 
     # extract the computed interventional distribution

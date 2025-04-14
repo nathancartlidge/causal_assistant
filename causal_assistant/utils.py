@@ -3,13 +3,18 @@ import re
 import inspect
 import warnings
 
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import pandas as pd
 
 import causalBootstrapping as cb
 from distEst_lib import MultivarContiDistributionEstimator as MCDE
+
+
+FeatureType: TypeAlias = np.ndarray | pd.DataFrame | pd.Series
+BinFeatureType: TypeAlias = np.ndarray | pd.DataFrame | pd.Series | \
+                            tuple[np.ndarray | pd.DataFrame | pd.Series, int | list[int]]
 
 
 def _find_primed_features(function_string):

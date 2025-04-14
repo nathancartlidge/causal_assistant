@@ -4,6 +4,8 @@ import warnings
 import pandas as pd
 import numpy as np
 
+from causal_assistant.utils import BinFeatureType, FeatureType
+
 
 def validate_causal_graph(causal_graph: str | None, cause_var: str = "y", effect_var: str = "X") -> str:
     """Detect (and attempt to resolve) common errors in causal graphs"""
@@ -29,7 +31,7 @@ def validate_causal_graph(causal_graph: str | None, cause_var: str = "y", effect
     clauses = causal_graph.split(";")
     variable_finder = re.compile(r"(.*?)<?->(.*)")
     variables = set([
-        v
+        v.strip()
         for clause in clauses
         for r in variable_finder.findall(clause)
         for v in r
@@ -42,8 +44,8 @@ def validate_causal_graph(causal_graph: str | None, cause_var: str = "y", effect
     return causal_graph
 
 
-def validate_causal_features(effect_var: str, warn_on_cast: bool,
-                             input_features: dict[str, np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]]):
+def validate_causal_features(effect_var: str, warn_on_cast: bool, input_features: dict[str, BinFeatureType]) \
+        -> tuple[dict[str, FeatureType], dict[str, list[int]]]:
     """
     Detect (and attempt to resolve) common errors in causal graphs, split
     :param effect_var: Typically 'X', a variable not used as part of the causal estimation.
@@ -67,23 +69,27 @@ def validate_causal_features(effect_var: str, warn_on_cast: bool,
             f = input_features[var][0]
             b = input_features[var][1]
 
+        if isinstance(f, (pd.DataFrame, pd.Series)):
+            f = f.values
+
         if f.dtype == bool or f.dtype == "O":
             if len(f.shape) == 2:
                 assert f.shape[1] == 1, f"parameter '{var}' is of bool type, but multi-dimensional - unable to factorise!"
                 f = np.reshape(f, -1)
 
             if warn_on_cast:
-                warnings.warn(f"automatically factorising '{var}'", category=RuntimeWarning)
+                warnings.warn(message=f"automatically factorising '{var}'", category=RuntimeWarning)
 
             f = pd.factorize(f)[0]
 
-        assert isinstance(f, (np.ndarray, pd.DataFrame)), f"parameter '{var}' is of type {type(var)}, not expected " \
-            "(numpy array / pandas dataframe)!"
+        if not isinstance(f, (np.ndarray, pd.DataFrame, pd.Series)):
+            warnings.warn(message=f"parameter '{var}' is of type {type(f)}, this may cause issues!",
+                          category=EncodingWarning)
 
         if len(f.shape) == 1 and f.shape[0] == length:
             # flat array provided: reshape it
             if warn_on_cast:
-                warnings.warn(f"automatically re-shaping '{var}'", category=RuntimeWarning)
+                warnings.warn(message=f"automatically re-shaping '{var}'", category=RuntimeWarning)
 
             if isinstance(f, np.ndarray):
                 f = f.reshape(-1, 1)
@@ -92,6 +98,11 @@ def validate_causal_features(effect_var: str, warn_on_cast: bool,
             f"feature '{var}' is of wrong shape {f.shape} (should be [{length}, X])"
 
         if b is not None:
+            if isinstance(b, int):
+                b = [b for _ in range(f.shape[1])]
+                if f.shape[1] > 1 and warn_on_cast:
+                    warnings.warn(message=f"automatically vectorising bins for '{var}'", category=RuntimeWarning)
+
             assert len(b) == f.shape[1], f"bin size ({len(b)}) must match feature size {f.shape[1]} for '{var}'!"
         else:
             b = [0 for _ in range(f.shape[1])]
