@@ -1,9 +1,12 @@
+import re
+import warnings
+
 import pandas as pd
 import numpy as np
 
 
 def validate_causal_graph(causal_graph: str | None, cause_var: str = "y", effect_var: str = "X") -> str:
-    """Validates that a causal graph is correctly configured."""
+    """Detect (and attempt to resolve) common errors in causal graphs"""
     if causal_graph is None:
         # non-causal bootstrapping!
         causal_graph = f"{cause_var};{effect_var};{cause_var}->{effect_var};"
@@ -11,12 +14,43 @@ def validate_causal_graph(causal_graph: str | None, cause_var: str = "y", effect
     assert cause_var in causal_graph, f"cause var. '{cause_var}' does not appear in the causal graph?"
     assert effect_var in causal_graph, f"effect var. '{cause_var}' does not appear in the causal graph?"
 
-    # todo: remove comments from the causal graph
+    # de-indent the graph
+    graph_lines = [l.strip() for l in causal_graph.splitlines()]
+
+    # remove comments and blank lines, support newline as a delimiter
+    graph_lines = [l for l in graph_lines if l and not l.startswith("#")]
+    causal_graph = ";".join(graph_lines).replace(";;", ";")
+
+    # add a final ; if missing
+    if not causal_graph.endswith(";"):
+        causal_graph += ";"
+
+    # validate that all variables used in the graph are defined
+    clauses = causal_graph.split(";")
+    variable_finder = re.compile(r"(.*?)<?->(.*)")
+    variables = set([
+        v
+        for clause in clauses
+        for r in variable_finder.findall(clause)
+        for v in r
+    ])
+
+    missing_vars = [v for v in variables if v not in clauses]
+    if missing_vars:
+        raise ValueError(f"graph variable(s) '{','.join(missing_vars)}' not defined at top of graph!")
+
     return causal_graph
 
 
-def validate_causal_features(effect_var: str, input_features: dict[str, np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]]):
-    """Validate that each causal feature is of the correct shape etc"""
+def validate_causal_features(effect_var: str, warn_on_cast: bool,
+                             input_features: dict[str, np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]]):
+    """
+    Detect (and attempt to resolve) common errors in causal graphs, split
+    :param effect_var: Typically 'X', a variable not used as part of the causal estimation.
+    :param warn_on_cast: If true, warnings will be emitted when the features are modified by this method.
+    :param input_features: All features required for the graph.
+    :return: tuple: feature dict and bin count dict
+    """
     length = input_features[effect_var].shape[0]
 
     features = {}
@@ -33,20 +67,24 @@ def validate_causal_features(effect_var: str, input_features: dict[str, np.ndarr
             f = input_features[var][0]
             b = input_features[var][1]
 
-        if f.dtype == bool:
+        if f.dtype == bool or f.dtype == "O":
             if len(f.shape) == 2:
-                assert f.shape[1] == 1, f"parameter {var} is of bool type, but multi-dimensional - unable to factorise!"
+                assert f.shape[1] == 1, f"parameter '{var}' is of bool type, but multi-dimensional - unable to factorise!"
                 f = np.reshape(f, -1)
+
+            if warn_on_cast:
+                warnings.warn(f"automatically factorising '{var}'", category=RuntimeWarning)
 
             f = pd.factorize(f)[0]
 
-        assert isinstance(f, (np.ndarray, pd.DataFrame)), f"parameter {var} is of type {type(var)}, not expected " \
+        assert isinstance(f, (np.ndarray, pd.DataFrame)), f"parameter '{var}' is of type {type(var)}, not expected " \
             "(numpy array / pandas dataframe)!"
 
         if len(f.shape) == 1 and f.shape[0] == length:
-            # todo: automatically fix features, including auto-factorisation
-            #       also we should probably raise some kind of warning when we do this?
-            # flat array: reshape it for you
+            # flat array provided: reshape it
+            if warn_on_cast:
+                warnings.warn(f"automatically re-shaping '{var}'", category=RuntimeWarning)
+
             if isinstance(f, np.ndarray):
                 f = f.reshape(-1, 1)
 

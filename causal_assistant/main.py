@@ -23,15 +23,22 @@ except NameError:
 
 
 def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X",
-              steps: int = 50, fit_method: Literal['hist', 'kde'] = "kde",
+              steps: int = 50, fit_method: Literal['hist', 'kde'] = "kde", warn_on_cast: bool = False,
               **features: np.ndarray | pd.DataFrame | tuple[np.ndarray, int | list]):
     """
-    Perform a repeated causal bootstrapping on the provided data.
+    Perform end-to-end repeated causal bootstrapping on a dataset
 
+    :param causal_graph: The graph to de-confound the dataset with
+    :param cause_var: Typically 'y' - the root cause (prediction target)
+    :param effect_var: Typically 'X' - the effect (prediction data)
+    :param steps: The number of times to repeat the bootstrapping stage. Increases output size
+    :param fit_method: Method used to approximate probability distributions
+    :param warn_on_cast: Warn if any values aren't correctly defined as inputs
+    :param features: All features used in the causal graph
     :return: de-confounded X and y (effect and cause) variables, as re-indexed pandas dataframes
     """
     causal_graph = validate_causal_graph(causal_graph, cause_var=cause_var, effect_var=effect_var)
-    features, bins = validate_causal_features(effect_var=effect_var, input_features=features)
+    features, bins = validate_causal_features(effect_var=effect_var, input_features=features, warn_on_cast=warn_on_cast)
 
     try:
         weight_func, function_string = cb.general_cb_analysis(
@@ -49,6 +56,15 @@ def bootstrap(causal_graph: str, cause_var: str = "y", effect_var: str = "X",
 
 
 def analyse_graph(graph: str, cause_var: str = "y", effect_var: str = "X", print_output: bool = False):
+    """
+    Compute and return the interventional distribution function
+
+    :param graph: Causal graph used
+    :param cause_var: Typically 'y' - the root cause (prediction target)
+    :param effect_var: Typically 'y' - the effect (prediction data)
+    :param print_output: If `True`, output from causalBootstrapping's `general_cb_analysis` will be printed
+    :return: Equation for the interventional distribution.
+    """
     graph = validate_causal_graph(causal_graph=graph, cause_var=cause_var, effect_var=effect_var)
 
     # this is a little hacky, but it's the best option we have
