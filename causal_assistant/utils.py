@@ -28,11 +28,11 @@ def _find_primed_features(function_string):
     return primed_feature_map
 
 
-def make_data_map(function_string, kernel_used: bool, features: dict[str, np.ndarray | pd.DataFrame],
-                  bins: dict[str, list[int]]):
+def make_data_map(function_string, kernel_used: bool, features: dict[str, FeatureType]) -> dict[str, FeatureType]:
     """
     Creates the 'data' parameter for general causal bootstrapping
     :param function_string: The probability function string derived from causal analysis
+    :param kernel_used: Set to true if a kernel is included as part of the data map (subtly changes entries)
     :param features: All features to be included in the data map. Dataframes will have index inserted for preservation
     :return: The 'data' argument, properly formatted
     """
@@ -44,10 +44,7 @@ def make_data_map(function_string, kernel_used: bool, features: dict[str, np.nda
     primed_features = _find_primed_features(function_string)
 
     for feature, primed_feature in primed_features.items():
-        if kernel_used:
-            features[primed_feature] = features[feature]
-        else:
-            features[primed_feature] = features.pop(feature)
+        features[primed_feature] = features[feature]
 
     return features
 
@@ -73,7 +70,7 @@ def _find_required_distributions(function_string) -> tuple[set[str], dict[str, l
     return required_features, required_dists
 
 
-def _make_dist(required_values: list[str], bins: dict[str, list[int]], features: dict[str, Any],
+def _make_dist(required_values: list[str], bins: dict[str, list[int]], features: dict[str, FeatureType],
                fit_method: Literal['kde', 'hist'], estimator_kwargs: dict[str, Any] | None = None):
     """
     Make a distribution
@@ -84,7 +81,7 @@ def _make_dist(required_values: list[str], bins: dict[str, list[int]], features:
     :param estimator_kwargs: extra kwargs for the estimator
     :return: The distribution method
     """
-    data_bins = [v for r in required_values for v in bins[r]]
+    data_bins = [v for r in required_values for v in bins[r.replace("_prime", "")]]
     if len(required_values) == 1:
         data_fit = features[required_values[0].replace("_prime", "")]
     else:
@@ -112,7 +109,7 @@ def _make_dist(required_values: list[str], bins: dict[str, list[int]], features:
     return pdf_method
 
 
-def make_dist_map(function_string, features: dict[str, np.ndarray | pd.DataFrame], bins: dict[str, list[int]],
+def make_dist_map(function_string, features: dict[str, FeatureType], bins: dict[str, list[int]],
                   fit_method: Literal['kde', 'hist'] = "kde", estimator_kwargs: dict | None = None):
     """
     Creates the 'dist_map' parameter for general causal bootstrapping
@@ -120,6 +117,8 @@ def make_dist_map(function_string, features: dict[str, np.ndarray | pd.DataFrame
     :param fit_method: The method to estimate distributions. Can be either 'hist' or 'kde'
     :param features: All features involved in the de-confounding process. These can either be just the raw feature (for
                      categorical data) or a tuple of the data and the number of bins requested (for continuous data).
+    :param bins: Bins used for each feature
+    :param estimator_kwargs: arguments to be passed to the estimator
     :return: A dictionary mapping probability functions to lambda methods representing their distributions
     """
     required_features, required_dists = _find_required_distributions(function_string)
@@ -148,17 +147,27 @@ def make_dist_map(function_string, features: dict[str, np.ndarray | pd.DataFrame
     return distributions
 
 
-def calc_weights(cause_var, data_map, dist_map, features, weight_func, kernel_used=False):
+def _calc_weights(function_string: str, weight_func: callable, cause_var: str,
+                  features: dict[str, FeatureType], bins: dict[str, list[int]], fit_method: Literal['kde', 'hist'],
+                  kernel_used: bool = False):
     """
     Compute causal weights for a given set of distributions
     Adapted from general_causal_bootstrapping_simple in causalBootstrapping
     """
+    data_map = make_data_map(function_string, kernel_used=kernel_used, features=features)
+    dist_map = make_dist_map(function_string, fit_method=fit_method, features=features, bins=bins)
+
     intv_cause = f"intv_{cause_var}"
     kernel = eval(f"lambda {intv_cause}, {cause_var}: 1 if {intv_cause}=={cause_var} else 0")
     N = features[cause_var].shape[0]
     w_func = weight_func(dist_map=dist_map, N=N, kernel=kernel)
     unique_causes = np.unique(features[cause_var])
     weights = np.zeros((N, len(unique_causes)), dtype=np.float64)
+
+    primed_features = _find_primed_features(function_string)
+    if not kernel_used:
+        for feature, _ in primed_features.items():
+            features.pop(feature)
 
     for i, y in enumerate(unique_causes):
         weights[:, i] = cb.weight_compute(weight_func=w_func,
@@ -169,11 +178,11 @@ def calc_weights(cause_var, data_map, dist_map, features, weight_func, kernel_us
     if all_weights_equal:
         warnings.warn("All weights are equal! Check your data")
 
-    return weights, all_weights_equal
+    return weights, data_map, unique_causes
 
 
 def _bootstrap(weight_func: callable, function_string: str, cause_var: str, effect_var: str,
-               fit_method: Literal['kde', 'hist'], steps: int, features: dict[str, np.ndarray | pd.DataFrame],
+               fit_method: Literal['kde', 'hist'], steps: int, features: dict[str, FeatureType],
                bins: dict[str, list[int]]):
     # assume effect data will be a dataframe, so will have an index?
     original_df = features[effect_var]
@@ -181,13 +190,14 @@ def _bootstrap(weight_func: callable, function_string: str, cause_var: str, effe
         # auto-cast
         original_df = features[effect_var] = pd.DataFrame(features[effect_var])
 
-    # not a massive fan of this :(
     kernel_used = re.match(rf".*(K\({cause_var},{cause_var}'+\)).*", function_string) is not None
-
-    data_map = make_data_map(function_string, kernel_used=kernel_used, features=features, bins=bins)
-    dist_map = make_dist_map(function_string, fit_method=fit_method, features=features, bins=bins)
-
-    weights, _ = calc_weights(cause_var, data_map, dist_map, features, weight_func, kernel_used=kernel_used)
+    weights, data_map, _ = _calc_weights(function_string=function_string,
+                                         weight_func=weight_func,
+                                         cause_var=cause_var,
+                                         fit_method=fit_method,
+                                         features=features,
+                                         bins=bins,
+                                         kernel_used=kernel_used)
 
     if kernel_used:
         ivn = cause_var
@@ -198,10 +208,8 @@ def _bootstrap(weight_func: callable, function_string: str, cause_var: str, effe
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=RuntimeWarning)
         for _ in range(steps):
-            bootstrap_data, _ = cb.bootstrapper(
-                data=data_map, weights=weights, mode="robust",
-                intv_var_name_in_data=[ivn]
-            )
+            bootstrap_data, _ = cb.bootstrapper(data=data_map, weights=weights, mode="robust",
+                                                intv_var_name_in_data=[ivn])
             bootstraps.append(bootstrap_data)
 
     cb_data = {}

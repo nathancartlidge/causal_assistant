@@ -9,7 +9,7 @@ authors = [
   { name="Nathan Cartlidge", email="nac120@student.bham.ac.uk" },
   { name="Jianqiao Mao", email="jxm1417@student.bham.ac.uk" },
 ]
-version = "0.2.0"
+version = "0.3.0"
 readme = "README.md"
 description = "Causal Bootstrapping utility package"
 requires-python = ">=3.12"
