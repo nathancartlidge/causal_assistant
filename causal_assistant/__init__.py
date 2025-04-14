@@ -1,5 +1,5 @@
 """
 Causal Assistant Package
 """
-from causal_assistant.core import bootstrap
-from causal_assistant.helper import analyse_graph
+from causal_assistant.main import bootstrap
+from causal_assistant.helper import validate_causal_graph, validate_causal_features
